@@ -1,10 +1,9 @@
-use std::{
-    env::{self},
-    fs::File,
-    io::{self, Write},
-    process,
-};
+use std::{env, process};
 
+use chrono::Utc;
+use reqwest::{Client, StatusCode};
+
+pub static API_URL: &str = "http://v0.api.upyun.com/";
 pub struct SqlDumpInfo {
     pub name: String,
     pub password: String,
@@ -29,24 +28,11 @@ impl SqlDumpInfo {
     }
 }
 
-pub fn dump_sql(sql_info: SqlDumpInfo) -> io::Result<()> {
-    let output = process::Command::new("mysqldump")
-        .arg(sql_info.name)
-        .arg(sql_info.password)
-        .arg(sql_info.database)
-        .output()
-        .unwrap();
-
-    let mut file = File::create(sql_info.save_path)?;
-
-    file.write_all(&output.stdout)?;
-
-    Ok(())
+pub async fn init() {
+    dotenv::dotenv().ok().unwrap();
 }
 
-fn main() -> Result<(), anyhow::Error> {
-    dotenv::dotenv().ok().unwrap();
-
+pub async fn dump_sql() -> Result<String, anyhow::Error> {
     let sql_dump_info = SqlDumpInfo::new(
         env::var("name")?,
         env::var("password")?,
@@ -54,9 +40,44 @@ fn main() -> Result<(), anyhow::Error> {
         env::var("save_path")?,
     );
 
-    dump_sql(sql_dump_info)?;
+    let output = process::Command::new("mysqldump")
+        .arg(sql_dump_info.name)
+        .arg(sql_dump_info.password)
+        .arg(sql_dump_info.database)
+        .output()
+        .unwrap();
 
-    println!("=>文件保存成功!");
+    Ok(String::from_utf8(output.stdout)?)
+}
+
+async fn remote_upload_file(file_content: String) -> Result<(), anyhow::Error> {
+    let mut file_name = String::from("/sql_dump/dump_");
+    file_name.push_str(Utc::now().to_string().as_str());
+    file_name.push_str(".sql");
+
+    let request_url = format!("{}{}/{}", API_URL, "smile-uyun", file_name);
+
+    let resp = Client::new()
+        .post(request_url.as_str())
+        .basic_auth(env::var("operator")?, Some(env::var("operator_password")?))
+        .body(file_content.as_bytes().to_vec())
+        .send()
+        .await?;
+
+    if resp.status() == StatusCode::OK {
+        println!("成功!");
+    } else {
+        println!("失败, resp text {}", resp.text().await?);
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    init().await;
+
+    remote_upload_file(dump_sql().await?).await?;
 
     Ok(())
 }
