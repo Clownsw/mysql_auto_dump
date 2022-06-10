@@ -1,0 +1,14 @@
+[package]
+name = "mysql_auto_dump"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenv = "*"
+anyhow="*"
+
+[profile.release]
+lto = true
+strip = true
+debug = false
+opt-level = 3
