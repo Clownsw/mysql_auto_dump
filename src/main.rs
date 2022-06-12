@@ -8,11 +8,10 @@ pub struct SqlDumpInfo {
     pub name: String,
     pub password: String,
     pub database: String,
-    pub save_path: String,
 }
 
 impl SqlDumpInfo {
-    pub fn new(name: String, password: String, database: String, save_path: String) -> Self {
+    pub fn new(name: String, password: String, database: String) -> Self {
         let mut new_name = String::from("-u");
         new_name.push_str(name.as_str());
 
@@ -23,7 +22,6 @@ impl SqlDumpInfo {
             name: new_name,
             password: new_password,
             database,
-            save_path,
         }
     }
 }
@@ -37,7 +35,6 @@ pub async fn dump_sql() -> Result<String, anyhow::Error> {
         env::var("name")?,
         env::var("password")?,
         env::var("database")?,
-        env::var("save_path")?,
     );
 
     let output = process::Command::new("mysqldump")
@@ -55,7 +52,7 @@ async fn remote_upload_file(file_content: String) -> Result<(), anyhow::Error> {
     file_name.push_str(Utc::now().to_string().as_str());
     file_name.push_str(".sql");
 
-    let request_url = format!("{}{}/{}", API_URL, "smile-uyun", file_name);
+    let request_url = format!("{}{}/{}", API_URL, env::var("bucket_name")?, file_name);
 
     let resp = Client::new()
         .post(request_url.as_str())
